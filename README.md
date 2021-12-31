@@ -1,6 +1,6 @@
 # Popular-Movies-Analysis
 
-1. Introduction
+* Introduction
 With the continuous improvement of people’s living standard, movies play an increasingly important role in people’s daily entertainment. A good movie could not only bring people emotional resonance but also inspire people to think. There are many excellent movies that have harvested both profits and reputation throughout the movie history, like “The Dark Knight”, “The Shawshank Redemption”, “The Godfather” and so on. However, here are some doubts that come to our mind, for examples, “Are profitable movies good?”, “What kind of attributes contributed to a good movie?”. This project is determined to explore and answer these questions.
 
 2. Datasets
