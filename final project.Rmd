@@ -1,0 +1,183 @@
+---
+output:
+  pdf_document: default
+---
+# Analysis Part
+
+
+## Is the distribution of scores normally distributed? (Anderson Darling Test)
+
+```{r}
+#install.packages('tinytex')
+library(ggplot2)
+library(dplyr, warn.conflicts = F)
+library(gridExtra, warn.conflicts = F)
+library(ranger, warn.conflicts = F)
+library(Metrics)
+library(reshape2)
+library(RColorBrewer)
+library(corrplot, warn.conflicts = F)
+library(ggthemes)
+
+# load data
+my_data <- read.csv("movies.csv")
+head(my_data)
+```
+
+Density plot: 
+
+```{r}
+library("ggpubr")
+ggdensity(my_data$Score, 
+          main = "Density plot of Score",
+          xlab = "Score")
+
+```
+
+Q-Q plot: 
+
+```{r}
+library(ggpubr)
+ggqqplot(my_data$Score)
+```
+
+AD-test
+
+```{r}
+library(nortest)
+ad.test(my_data$Score)
+```
+Null hypothesis: the distribution of the data is the same as the normal distribution.
+
+Alternative hypothesis: the distribution of the data is significantly different from normal distribution.
+
+From the output, the p-value < 0.05, the null hypothesis is rejected, so the distribution is non-normal.
+
+
+
+## What is the difference of means of scores for the movies directed by Woody Allen and Alfred Hitchcock? (Two sample Bootstrap)
+
+```{r}
+# check NAs for the two attributes
+sum(is.na(my_data$Score)) # 0 NA
+sum(is.na(my_data$Director)) # 1 NA
+
+# clean the dataset
+my_data <- na.omit(my_data)
+
+# make side by side boxplots 
+WoodyAllen = my_data$Score[my_data$Director=="Woody Allen"]
+AlfredHitchcock = my_data$Score[my_data$Director=="Alfred Hitchcock"]
+labels = c("WoodyAllen", "AlfredHitchcock")
+boxplot(WoodyAllen, AlfredHitchcock, names=labels, 
+        col="orange", 
+        main = "Score of movies directed by Woody Allen and Alfred Hitchcock", 
+        xlab = "Woody Allen and Alfred Hitchcock", 
+        ylab = "Scores")
+```
+
+The boxplots of scores of movies directed by Woody Allen and Alfred Hitchcock show that the scores of movies directed by Alfred Hitchcock is generally higher than scores of movies directed by Woody Allen. 
+
+```{r}
+set.seed(123)
+# bootstrap the difference of means
+diff <- rep(NA,10000)
+
+for (j in 1:10000){
+  boot.WoodyA <- mean(sample(WoodyAllen, length(WoodyAllen), replace = T))
+  boot.AlfredH <- mean(sample(AlfredHitchcock, length(AlfredHitchcock), replace = T))
+  diff[j] <- boot.AlfredH-boot.WoodyA # the difference
+}
+
+# plot the bootstrap the difference of means
+hist(diff, breaks = 40, prob = T, main = "Histogram of bootstrap difference of means")
+truedifference = mean(AlfredHitchcock)-mean(WoodyAllen)
+abline(v = truedifference, col = "red", lty = 2)
+```
+
+Comment:
+
+The bootstrap distribution of difference of means looks quite normal, with some skewness. 
+
+```{r}
+# Find the 95% bootstrap percentile interval for the difference of means. 
+quantile(diff, c(0.025,0.975))
+```
+
+Conclusion:
+
+The 2.5% and 97.5% points of the bootstrap distribution give us the interval (0.51, 1.27), so we are 95% confident that the difference of means between scores of movies directed by Alfred Hitchcock and Woody Allen is between 0.51 and 1.27.
+
+
+
+## Is there a relationship between the popularity and runtime of movies? (Chi-squared test for two-way tables)
+
+Null hypothesis is that the popularity and runtime of movies are independent. The popularity do not vary by runtime of movies. 
+
+Alternative hypothesis is that the popularity and runtime of movies are dependent. The popularity do vary by runtime of movies.
+
+```{r}
+# Discretization
+# categorize runtime
+my_data$runtime_cat = numeric(length((my_data$Runtime)))
+my_data$runtime_cat[my_data$Runtime<=90]="Short"
+my_data$runtime_cat[my_data$Runtime<=120 & my_data$Runtime>=91]="Medium"
+my_data$runtime_cat[my_data$Runtime>=121]="Long"
+my_data$runtime_cat = as.factor(my_data$runtime_cat)
+str(my_data$runtime_cat)
+
+# categorize vote
+my_data$vote_cat = numeric(length((my_data$Vote)))
+my_data$vote_cat[my_data$Vote<=167625]="Not Popular"
+my_data$vote_cat[my_data$Vote<=335251 & my_data$Vote>=167626]="Slightly Popular"
+my_data$vote_cat[my_data$Vote<=1005754 & my_data$Vote>=335252]="Moderately Popular"
+my_data$vote_cat[my_data$Vote>=1005755]="Very Popular"
+my_data$vote_cat = as.factor(my_data$vote_cat)
+str(my_data$vote_cat)
+
+# test
+a = table(my_data$vote_cat, my_data$runtime_cat)
+chisq.test(a)
+```
+
+Conclusion:
+
+Since p-value is less than 0.05, we can reject the null hypothesis. Thus, there is enough evidence to conclude that there is a significant relationship between the popularity and runtime of movies. They are dependent.
+
+
+
+## Is there a relationship between the popularity and scores of movies? (Multiple Linear Regression)
+
+Correlation between the score and the vote. (Linear regression) 
+```{r}
+my_data %<>% 
+  as_tibble() %>% 
+  mutate(VoteMln = Vote/1000000)
+
+ggplot(my_data, aes(x=Score, y=VoteMln)) + 
+  geom_jitter(alpha = 0.07, col = "purple4") +
+  geom_smooth(method = "loess", fill = "red3", color = "brown4", formula = y ~ x)+
+  scale_y_continuous(trans="log10", name = "Votes (in milions)")+
+  scale_x_continuous(name = "Score", breaks = c(0,2,4,6,8,10))+
+  annotate("text", x = 3, y = 1, label = "italic(r) == 0.264", parse = T, size = 6.5)+
+  labs(caption = "Made by Ying Liu")+
+  theme_fivethirtyeight()+
+  theme(axis.title = element_text(size = 14), axis.text = element_text(size = 11, face = "bold"),
+        axis.line = element_line(size = 0.4, colour = "grey10"), plot.caption = element_text(color = "gray25", face = "italic", size = 10))
+
+# make a plot
+lm.fit1=lm(Vote~Score,data=my_data)
+plot(Vote~Score,data=my_data)
+abline(lm.fit1, col="red")
+```
+
+
+```{r}
+lm.fit=lm(Vote~Year+Score+Metascore+Runtime+Revenue,data=my_data)
+summary(lm.fit)
+```
+Observation:
+
+The F statistic is very large, so there is a relationship between the predictor and the response. Since $R^2 \approx 0.4877$, the relationship is fairly strong.
+
+The predictor Score, has a positive and statistically significant relationship with votes. The coefficient on Score in terms of vote is 53960, which means that an additional 1 increase in score of movies can lead to an increase in votes by approximately 53960.
